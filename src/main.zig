@@ -34,11 +34,42 @@ pub fn main() !void {
     std.debug.print("Mean of x: {d}\n", .{x_mean});
     std.debug.print("Mean of y: {d}\n", .{y_mean});
 
-    const regresssion: Regression = train(train_dataset);
-    std.debug.print("Regression model: m = {d}, b = {d}\n", .{ regresssion.m, regresssion.b });
-    //for (dataset.x, dataset.y) |x, y| {
-    //    std.debug.print("{d}, {d}\n", .{ x, y });
-    //}
+    const regression: Regression = train(train_dataset);
+    std.debug.print("Regression model: m = {d}, b = {d}\n", .{ regression.m, regression.b });
+
+    var total_error: f64 = 0.0;
+    var predictions = std.ArrayList(f64).init(std.heap.page_allocator);
+    defer predictions.deinit();
+
+    // Evaluate on test dataset
+    std.debug.print("\nEvaluating model on test dataset...\n", .{});
+    for (test_dataset.x, test_dataset.y) |x, y| {
+        const pred = predict(regression, x);
+        try predictions.append(pred);
+        const test_error = pred - y;
+        total_error += test_error * test_error;
+    }
+
+    const mse = total_error / @as(f64, @floatFromInt(test_dataset.x.len));
+    const rmse = @sqrt(mse);
+
+    // Print some sample predictions
+    std.debug.print("\nSample Predictions (first 10 test samples):\n", .{});
+    std.debug.print("X\tY (Actual)\tY (Predicted)\tError\n", .{});
+
+    var i: usize = 0;
+    while (i < @min(10, test_dataset.x.len)) : (i += 1) {
+        std.debug.print("{d:.4}\t{d:.4}\t{d:.4}\t{d:.4}\n", .{
+            test_dataset.x[i],
+            test_dataset.y[i],
+            predictions.items[i],
+            @abs(predictions.items[i] - test_dataset.y[i]),
+        });
+    }
+
+    std.debug.print("\nModel Performance Metrics:\n", .{});
+    std.debug.print("Mean Squared Error (MSE): {d:.6}\n", .{mse});
+    std.debug.print("Root Mean Squared Error (RMSE): {d:.6}\n", .{rmse});
 }
 
 pub fn normalize(data: []f64) void {
@@ -60,7 +91,7 @@ pub fn train(dataset: DataSet) Regression {
         .b = rand.float(f64) * 2.0 - 1.0, // Random value between -1 and 1
     };
     //
-    const epochs = 200000;
+    const epochs = 20000;
     const learning_rate = 0.00001;
     normalize(dataset.x);
     normalize(dataset.y);
