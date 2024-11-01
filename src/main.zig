@@ -4,6 +4,8 @@ const std = @import("std");
 
 const DataSet = struct { x: []f64, y: []f64 };
 
+const Derivative = struct { dm: f64, db: f64 };
+
 const Regression = struct { m: f64, b: f64 };
 
 pub fn main() !void {
@@ -32,28 +34,103 @@ pub fn main() !void {
     std.debug.print("Mean of x: {d}\n", .{x_mean});
     std.debug.print("Mean of y: {d}\n", .{y_mean});
 
+    const regresssion: Regression = train(train_dataset);
+    std.debug.print("Regression model: m = {d}, b = {d}\n", .{ regresssion.m, regresssion.b });
     //for (dataset.x, dataset.y) |x, y| {
     //    std.debug.print("{d}, {d}\n", .{ x, y });
     //}
+}
+
+pub fn normalize(data: []f64) void {
+    const mean_val = mean(data);
+    const std_dev = standard_deviation(data);
+    for (data) |*value| {
+        value.* = (value.* - mean_val) / std_dev;
+    }
+}
+
+pub fn train(dataset: DataSet) Regression {
+    const length = dataset.y.len;
+    var prng = std.rand.DefaultPrng.init(@intCast(std.time.timestamp()));
+    const rand = prng.random();
+
+    // Initialize m and b with small random values between -1 and 1
+    var regression = Regression{
+        .m = rand.float(f64) * 2.0 - 1.0, // Random value between -1 and 1
+        .b = rand.float(f64) * 2.0 - 1.0, // Random value between -1 and 1
+    };
+    //
+    const epochs = 200000;
+    const learning_rate = 0.00001;
+    normalize(dataset.x);
+    normalize(dataset.y);
+
+    var counter: usize = 0;
+    while (counter <= epochs) {
+        var predictions = std.heap.page_allocator.alloc(f64, length) catch unreachable;
+        defer std.heap.page_allocator.free(predictions);
+        var i: usize = 0;
+        for (dataset.x) |x| {
+            const prediction = predict(regression, x);
+            predictions[i] = prediction;
+            i += 1;
+        }
+
+        const derivative = backwards_prop(predictions, dataset);
+        regression.m -= learning_rate * derivative.dm;
+        regression.b -= learning_rate * derivative.db;
+
+        const run_cost = cost(predictions, dataset);
+
+        std.debug.print("Epoch: {d}, Cost: {d}\n", .{ counter, run_cost });
+        counter += 1;
+    }
+    return regression;
 }
 
 pub fn predict(regression: Regression, x: f64) f64 {
     return regression.m * x + regression.b;
 }
 
-//pub fn backwards_prop(regression: Regression, dataset: DataSet, learning_rate: f64) Regression {
-//    const n = dataset.y.len;
-//    var dm: f64 = 0.0;
-//    var db: f64 = 0.0;
-//
-//    return regression;
-//}
+pub fn backwards_prop(predictions: []f64, dataset: DataSet) Derivative {
+    const length = dataset.y.len;
+    const n = @as(f64, @floatFromInt(length));
+    var i: usize = 0;
+    //Calculate DF
+    //
+    var df = std.heap.page_allocator.alloc(f64, length) catch unreachable;
+    defer std.heap.page_allocator.free(df);
+    for (predictions, dataset.y) |prediction, y| {
+        df[i] = prediction - y;
+        i += 1;
+    }
 
-pub fn cost(prediction: f64, dataset: DataSet) f64 {
-    const n = dataset.y.len;
+    i = 0;
+    //Calculate dm
+    var sum_dm: f64 = 0.0;
+    for (df, dataset.x) |df_val, x| {
+        sum_dm += (df_val * x);
+        i += 1;
+    }
+    const dm = 2 * sum_dm / n;
+
+    i = 0;
+    //Calculate db
+    var sum_db: f64 = 0.0;
+    for (df) |df_val| {
+        sum_db += df_val;
+        i += 1;
+    }
+    const db = 2 * sum_db / n;
+
+    return Derivative{ .dm = dm, .db = db };
+}
+
+pub fn cost(predictions: []f64, dataset: DataSet) f64 {
+    const n = @as(f64, @floatFromInt(dataset.y.len));
     var sum: f64 = 0.0;
-    for (dataset.y) |y| {
-        sum += @exp2(prediction - y);
+    for (predictions, dataset.y) |prediction, y| {
+        sum += (prediction - y) * (prediction - y);
     }
     return sum / n;
 }
@@ -62,15 +139,16 @@ pub fn cost(prediction: f64, dataset: DataSet) f64 {
 
 pub fn mean(data: []f64) f64 {
     var sum: f64 = 0.0;
+    const n = @as(f64, @floatFromInt(data.len));
     for (data) |value| {
         sum += value;
     }
-    return sum;
+    return sum / n;
 }
 
 pub fn standard_deviation(data: []f64) f64 {
     std.debug.print("Calculating standard deviation\n", .{});
-    const n: u8 = data.len;
+    const n = @as(f64, @floatFromInt(data.len));
     const data_mean = mean(data);
     var sum: f64 = 0.0;
     for (data) |value| {
