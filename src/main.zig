@@ -1,4 +1,5 @@
 const std = @import("std");
+const csv = @import("csv.zig");
 
 //struct declartion for the dataset
 
@@ -8,68 +9,97 @@ const Derivative = struct { dm: f64, db: f64 };
 
 const Regression = struct { m: f64, b: f64 };
 
-pub fn main() !void {
-    std.debug.print("Starting Regression!\n", .{});
+const HyperParameters = struct {
+    epochs: usize,
+    learning_rate: f64,
+    name: []const u8,
+};
 
-    const filename = "data/data_for_lr.csv";
-    const content = try read_csv(filename);
-    defer std.heap.page_allocator.free(content);
+const EvaluationResult = struct {
+    predictions: std.ArrayList(f64),
+};
 
-    // parse csv into x and y vectors
-    const dataset = try parse_csv_data(content);
-    defer std.heap.page_allocator.free(dataset.x);
-    defer std.heap.page_allocator.free(dataset.y);
+const Metrics = struct {
+    mse: f64,
+    rmse: f64,
+};
 
-    std.debug.print("Dataset loaded", .{});
-
-    const train_dataset = DataSet{ .x = dataset.x[0..500], .y = dataset.y[0..500] };
-    const test_dataset = DataSet{ .x = dataset.x[500..], .y = dataset.y[500..] };
-
-    std.debug.print("size of train_dataset: {d}\n", .{train_dataset.y.len});
-    std.debug.print("size of test_dataset: {d}\n", .{test_dataset.y.len});
-
-    const x_mean = mean(dataset.x);
-    const y_mean = mean(dataset.y);
-
-    std.debug.print("Mean of x: {d}\n", .{x_mean});
-    std.debug.print("Mean of y: {d}\n", .{y_mean});
-
-    const regression: Regression = train(train_dataset);
-    std.debug.print("Regression model: m = {d}, b = {d}\n", .{ regression.m, regression.b });
-
-    var total_error: f64 = 0.0;
+pub fn evaluate_model(regression: Regression, dataset: DataSet) !EvaluationResult {
     var predictions = std.ArrayList(f64).init(std.heap.page_allocator);
-    defer predictions.deinit();
 
-    // Evaluate on test dataset
-    std.debug.print("\nEvaluating model on test dataset...\n", .{});
-    for (test_dataset.x, test_dataset.y) |x, y| {
+    // Evaluate on dataset
+    for (dataset.x) |x| {
         const pred = predict(regression, x);
         try predictions.append(pred);
+    }
+
+    return EvaluationResult{
+        .predictions = predictions,
+    };
+}
+
+pub fn calculate_metrics(predictions: []const f64, dataset: DataSet) Metrics {
+    var total_error: f64 = 0.0;
+
+    for (predictions, dataset.y) |pred, y| {
         const test_error = pred - y;
         total_error += test_error * test_error;
     }
 
-    const mse = total_error / @as(f64, @floatFromInt(test_dataset.x.len));
+    const mse = total_error / @as(f64, @floatFromInt(dataset.y.len));
     const rmse = @sqrt(mse);
 
-    // Print some sample predictions
-    std.debug.print("\nSample Predictions (first 10 test samples):\n", .{});
-    std.debug.print("X\tY (Actual)\tY (Predicted)\tError\n", .{});
+    return Metrics{
+        .mse = mse,
+        .rmse = rmse,
+    };
+}
 
-    var i: usize = 0;
-    while (i < @min(10, test_dataset.x.len)) : (i += 1) {
-        std.debug.print("{d:.4}\t{d:.4}\t{d:.4}\t{d:.4}\n", .{
-            test_dataset.x[i],
-            test_dataset.y[i],
-            predictions.items[i],
-            @abs(predictions.items[i] - test_dataset.y[i]),
-        });
+pub fn run_experiment(train_dataset: DataSet, test_dataset: DataSet, hyperparams: HyperParameters) !void {
+    const train_start: i64 = std.time.milliTimestamp();
+    const regression = train(train_dataset, hyperparams);
+    const train_end: i64 = std.time.milliTimestamp();
+
+    const train_time = train_end - train_start;
+
+    std.debug.print("Training completed in {d}ms\n", .{train_time});
+    std.debug.print("Regression model: m = {d}, b = {d}\n", .{ regression.m, regression.b });
+
+    const evaluation_result = try evaluate_model(regression, test_dataset);
+    defer evaluation_result.predictions.deinit();
+
+    const metrics = calculate_metrics(evaluation_result.predictions.items, test_dataset);
+
+    std.debug.print("\nModel Performance Metrics for {s}:\n", .{hyperparams.name});
+    std.debug.print("Mean Squared Error (MSE): {d:.6}\n", .{metrics.mse});
+    std.debug.print("Root Mean Squared Error (RMSE): {d:.6}\n", .{metrics.rmse});
+}
+
+pub fn main() !void {
+    std.debug.print("Starting Regression Experiments!\n", .{});
+
+    const filename = "data/data_for_lr.csv";
+    const content = try csv.read_csv(filename);
+    defer std.heap.page_allocator.free(content);
+
+    const dataset = try parse_csv_data(content);
+    defer std.heap.page_allocator.free(dataset.x);
+    defer std.heap.page_allocator.free(dataset.y);
+
+    const train_dataset = DataSet{ .x = dataset.x[0..500], .y = dataset.y[0..500] };
+    const test_dataset = DataSet{ .x = dataset.x[500..], .y = dataset.y[500..] };
+
+    // Define different hyperparameter configurations
+    const experiments = [_]HyperParameters{
+        .{ .epochs = 5000, .learning_rate = 0.00001, .name = "Fast Learning" },
+        .{ .epochs = 10000, .learning_rate = 0.000005, .name = "Medium Learning" },
+        .{ .epochs = 20000, .learning_rate = 0.000001, .name = "Slow Learning" },
+    };
+
+    // Run each experiment
+    for (experiments) |hyperparams| {
+        try run_experiment(train_dataset, test_dataset, hyperparams);
     }
-
-    std.debug.print("\nModel Performance Metrics:\n", .{});
-    std.debug.print("Mean Squared Error (MSE): {d:.6}\n", .{mse});
-    std.debug.print("Root Mean Squared Error (RMSE): {d:.6}\n", .{rmse});
 }
 
 pub fn normalize(data: []f64) void {
@@ -80,7 +110,7 @@ pub fn normalize(data: []f64) void {
     }
 }
 
-pub fn train(dataset: DataSet) Regression {
+pub fn train(dataset: DataSet, hyperparams: HyperParameters) Regression {
     const length = dataset.y.len;
     var prng = std.rand.DefaultPrng.init(@intCast(std.time.timestamp()));
     const rand = prng.random();
@@ -90,14 +120,16 @@ pub fn train(dataset: DataSet) Regression {
         .m = rand.float(f64) * 2.0 - 1.0, // Random value between -1 and 1
         .b = rand.float(f64) * 2.0 - 1.0, // Random value between -1 and 1
     };
-    //
-    const epochs = 20000;
-    const learning_rate = 0.00001;
+
+    std.debug.print("\nStarting training with hyperparameters:\n", .{});
+    std.debug.print("Experiment: {s}\n", .{hyperparams.name});
+    std.debug.print("Epochs: {d}\n", .{hyperparams.epochs});
+    std.debug.print("Learning rate: {d}\n", .{hyperparams.learning_rate});
     normalize(dataset.x);
     normalize(dataset.y);
 
     var counter: usize = 0;
-    while (counter <= epochs) {
+    while (counter <= hyperparams.epochs) {
         var predictions = std.heap.page_allocator.alloc(f64, length) catch unreachable;
         defer std.heap.page_allocator.free(predictions);
         var i: usize = 0;
@@ -108,12 +140,13 @@ pub fn train(dataset: DataSet) Regression {
         }
 
         const derivative = backwards_prop(predictions, dataset);
-        regression.m -= learning_rate * derivative.dm;
-        regression.b -= learning_rate * derivative.db;
+        regression.m -= hyperparams.learning_rate * derivative.dm;
+        regression.b -= hyperparams.learning_rate * derivative.db;
 
         const run_cost = cost(predictions, dataset);
-
-        std.debug.print("Epoch: {d}, Cost: {d}\n", .{ counter, run_cost });
+        if (counter % 1000 == 0) {
+            std.debug.print("Epoch: {d}, Cost: {d}\n", .{ counter, run_cost });
+        }
         counter += 1;
     }
     return regression;
@@ -226,47 +259,6 @@ fn parse_csv_data(content: []u8) !DataSet {
     //
 
     return DataSet{ .x = try x_list.toOwnedSlice(), .y = try y_list.toOwnedSlice() };
-}
-
-// Read a CSV file and return the content as a byte array
-pub fn read_csv(filename: []const u8) ![]u8 {
-    std.debug.print("Opening CSV {s}\n", .{filename});
-
-    // initialize a heap allocator
-    const allocator = std.heap.page_allocator;
-    // open a file
-    const file = try std.fs.cwd().openFile(filename, .{});
-    defer file.close();
-
-    var buffer_reader = std.io.bufferedReader(file.reader());
-    const reader = buffer_reader.reader();
-
-    var line = std.ArrayList(u8).init(allocator);
-    defer line.deinit();
-
-    var buffer = std.ArrayList(u8).init(allocator);
-    errdefer buffer.deinit();
-
-    const writer = line.writer();
-    var line_no: usize = 0;
-    while (reader.streamUntilDelimiter(writer, '\n', null)) {
-        line_no += 1;
-        try buffer.appendSlice(line.items);
-        try buffer.append('\n');
-        line.clearRetainingCapacity();
-    } else |err| switch (err) {
-        error.EndOfStream => {
-            if (line.items.len > 0) {
-                line_no += 1;
-                try buffer.appendSlice(line.items);
-                try buffer.append('\n');
-            }
-        },
-        else => return err,
-    }
-
-    std.debug.print("Total lines: {d}\n", .{line_no});
-    return buffer.toOwnedSlice();
 }
 
 test "simple test" {
