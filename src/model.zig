@@ -48,7 +48,7 @@ pub fn cost(predictions: []f64, dataset: types.DataSet) f64 {
 pub fn train(dataset: types.DataSet, hyperparams: types.HyperParameters) types.Regression {
     const math_utils = @import("math_utils.zig");
     const length = dataset.y.len;
-    var prng = std.rand.DefaultPrng.init(@intCast(std.time.timestamp()));
+    var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
     const rand = prng.random();
 
     var regression = types.Regression{
@@ -97,7 +97,7 @@ pub fn train(dataset: types.DataSet, hyperparams: types.HyperParameters) types.R
 }
 
 pub fn evaluate_model(regression: types.Regression, dataset: types.DataSet) !types.EvaluationResult {
-    var predictions = std.ArrayList(f64).init(std.heap.page_allocator);
+    var predictions = std.array_list.Managed(f64).init(std.heap.page_allocator);
 
     for (dataset.x) |x| {
         const pred = predict(regression, x);

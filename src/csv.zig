@@ -10,33 +10,23 @@ pub fn read_csv(filename: []const u8) ![]u8 {
     const file = try std.fs.cwd().openFile(filename, .{});
     defer file.close();
 
-    var buffer_reader = std.io.bufferedReader(file.reader());
-    const reader = buffer_reader.reader();
+    var buffer: [409]u8 = undefined;
+    var reader = file.reader(&buffer);
+    const reader_interface = &reader.interface;
 
-    var line = std.ArrayList(u8).init(allocator);
-    defer line.deinit();
+    var all_data = std.array_list.Managed(u8).init(allocator);
+    errdefer all_data.deinit();
 
-    var buffer = std.ArrayList(u8).init(allocator);
-    errdefer buffer.deinit();
-
-    const writer = line.writer();
     var line_no: usize = 0;
-    while (reader.streamUntilDelimiter(writer, '\n', null)) {
+    while (reader_interface.takeDelimiterExclusive('\n')) |line_slice| {
         line_no += 1;
-        try buffer.appendSlice(line.items);
-        try buffer.append('\n');
-        line.clearRetainingCapacity();
+        try all_data.appendSlice(line_slice);
+        try all_data.append('\n');
     } else |err| switch (err) {
-        error.EndOfStream => {
-            if (line.items.len > 0) {
-                line_no += 1;
-                try buffer.appendSlice(line.items);
-                try buffer.append('\n');
-            }
-        },
+        error.EndOfStream => {},
         else => return err,
     }
 
     std.debug.print("Total lines: {d}\n", .{line_no});
-    return buffer.toOwnedSlice();
+    return all_data.toOwnedSlice();
 }

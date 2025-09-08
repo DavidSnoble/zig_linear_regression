@@ -10,7 +10,7 @@ pub const HyperParameters = struct {
     decay_steps: usize = 1000,
 };
 pub const EvaluationResult = struct {
-    predictions: std.ArrayList(f64),
+    predictions: std.array_list.Managed(f64),
 };
 pub const Metrics = struct {
     mse: f64,

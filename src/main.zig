@@ -4,7 +4,7 @@ const types = @import("types.zig");
 const model = @import("model.zig");
 
 pub fn evaluate_model(regression: types.Regression, dataset: types.DataSet) !types.EvaluationResult {
-    var predictions = std.ArrayList(f64).init(std.heap.page_allocator);
+    var predictions = std.array_list.Managed(f64).init(std.heap.page_allocator);
 
     // Evaluate on dataset
     for (dataset.x) |x| {
@@ -90,12 +90,12 @@ pub fn main() !void {
 
 fn parse_csv_data(content: []u8) !types.DataSet {
     const allocator = std.heap.page_allocator;
-    var x_list = std.ArrayList(f64).init(allocator);
-    var y_list = std.ArrayList(f64).init(allocator);
+    var x_list = std.array_list.Managed(f64).init(allocator);
+    var y_list = std.array_list.Managed(f64).init(allocator);
     defer x_list.deinit();
     defer y_list.deinit();
 
-    var iterator = std.mem.split(u8, content, "\n");
+    var iterator = std.mem.splitScalar(u8, content, '\n');
     var line_number: usize = 0;
 
     while (iterator.next()) |line| {
@@ -103,7 +103,7 @@ fn parse_csv_data(content: []u8) !types.DataSet {
         if (line.len == 0) continue;
         if (line[0] == 'x') continue;
 
-        var data = std.mem.split(u8, line, ",");
+        var data = std.mem.splitScalar(u8, line, ',');
 
         const x_str = data.next() orelse continue;
         const trimmed_x = std.mem.trim(u8, x_str, &std.ascii.whitespace);
