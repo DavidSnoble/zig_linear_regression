@@ -45,7 +45,7 @@ pub fn cost(predictions: []f64, dataset: types.DataSet) f64 {
     return sum / n;
 }
 
-pub fn train(dataset: types.DataSet, hyperparams: types.HyperParameters) types.Regression {
+pub fn train(dataset: types.DataSet, hyperparams: types.HyperParameters) !struct { regression: types.Regression, history: types.TrainingHistory } {
     const math_utils = @import("math_utils.zig");
     const length = dataset.y.len;
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
@@ -57,6 +57,13 @@ pub fn train(dataset: types.DataSet, hyperparams: types.HyperParameters) types.R
     };
 
     var current_lr = hyperparams.learning_rate;
+
+    // Initialize training history
+    var history = types.TrainingHistory{
+        .losses = try std.ArrayList(f64).initCapacity(std.heap.page_allocator, hyperparams.epochs + 1),
+        .epochs = try std.ArrayList(usize).initCapacity(std.heap.page_allocator, hyperparams.epochs + 1),
+        .experiment_name = hyperparams.name,
+    };
 
     std.debug.print("\nStarting training with hyperparameters:\n", .{});
     std.debug.print("Experiment: {s}\n", .{hyperparams.name});
@@ -88,12 +95,17 @@ pub fn train(dataset: types.DataSet, hyperparams: types.HyperParameters) types.R
         }
 
         const run_cost = cost(predictions, dataset);
+
+        // Accumulate loss history
+        history.losses.appendAssumeCapacity(run_cost);
+        history.epochs.appendAssumeCapacity(counter);
+
         if (counter % 1000 == 0) {
             std.debug.print("Epoch: {d}, Cost: {d}\n", .{ counter, run_cost });
         }
         counter += 1;
     }
-    return regression;
+    return .{ .regression = regression, .history = history };
 }
 
 pub fn evaluate_model(regression: types.Regression, dataset: types.DataSet) !types.EvaluationResult {

@@ -17,4 +17,16 @@ pub const Metrics = struct {
     rmse: f64,
 };
 
+pub const TrainingHistory = struct {
+    losses: std.ArrayList(f64),
+    epochs: std.ArrayList(usize),
+    experiment_name: []const u8,
+};
+
+pub const ExperimentResult = struct {
+    regression: Regression,
+    history: TrainingHistory,
+    metrics: Metrics,
+};
+
 const std = @import("std");

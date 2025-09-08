@@ -2,6 +2,9 @@ const std = @import("std");
 const csv = @import("csv.zig");
 const types = @import("types.zig");
 const model = @import("model.zig");
+const gui = @import("gui.zig");
+
+// ExperimentResult is now defined in types.zig
 
 pub fn evaluate_model(regression: types.Regression, dataset: types.DataSet) !types.EvaluationResult {
     var predictions = std.array_list.Managed(f64).init(std.heap.page_allocator);
@@ -34,17 +37,17 @@ pub fn calculate_metrics(predictions: []const f64, dataset: types.DataSet) types
     };
 }
 
-pub fn run_experiment(train_dataset: types.DataSet, test_dataset: types.DataSet, hyperparams: types.HyperParameters) !void {
+pub fn run_experiment(train_dataset: types.DataSet, test_dataset: types.DataSet, hyperparams: types.HyperParameters) !types.ExperimentResult {
     const train_start: i64 = std.time.milliTimestamp();
-    const regression = model.train(train_dataset, hyperparams);
+    const train_result = try model.train(train_dataset, hyperparams);
     const train_end: i64 = std.time.milliTimestamp();
 
     const train_time = train_end - train_start;
 
     std.debug.print("Training completed in {d}ms\n", .{train_time});
-    std.debug.print("Regression model: m = {d}, b = {d}\n", .{ regression.m, regression.b });
+    std.debug.print("Regression model: m = {d}, b = {d}\n", .{ train_result.regression.m, train_result.regression.b });
 
-    const evaluation_result = try evaluate_model(regression, test_dataset);
+    const evaluation_result = try evaluate_model(train_result.regression, test_dataset);
     defer evaluation_result.predictions.deinit();
 
     const metrics = calculate_metrics(evaluation_result.predictions.items, test_dataset);
@@ -52,6 +55,8 @@ pub fn run_experiment(train_dataset: types.DataSet, test_dataset: types.DataSet,
     std.debug.print("\nModel Performance Metrics for {s}:\n", .{hyperparams.name});
     std.debug.print("Mean Squared Error (MSE): {d:.6}\n", .{metrics.mse});
     std.debug.print("Root Mean Squared Error (RMSE): {d:.6}\n", .{metrics.rmse});
+
+    return .{ .regression = train_result.regression, .history = train_result.history, .metrics = metrics };
 }
 
 pub fn main() !void {
@@ -70,7 +75,7 @@ pub fn main() !void {
 
     // Define different hyperparameter configurations
     const experiments = [_]types.HyperParameters{
-        .{ .epochs = 5000, .learning_rate = 0.00001, .name = "Fast Learning (Fixed LR)" },
+        .{ .epochs = 100000, .learning_rate = 0.00001, .name = "Fast Learning (Fixed LR)" },
         .{ .epochs = 100000, .learning_rate = 0.000005, .name = "Medium Learning (Fixed LR)" },
         .{
             .epochs = 100000,
@@ -82,10 +87,23 @@ pub fn main() !void {
         },
     };
 
-    // Run each experiment
-    for (experiments) |hyperparams| {
-        try run_experiment(train_dataset, test_dataset, hyperparams);
+    // Run each experiment and collect results
+    var experiment_results = try std.ArrayList(types.ExperimentResult).initCapacity(std.heap.page_allocator, experiments.len);
+    defer {
+        for (experiment_results.items) |*result| {
+            result.history.losses.deinit(std.heap.page_allocator);
+            result.history.epochs.deinit(std.heap.page_allocator);
+        }
+        experiment_results.deinit(std.heap.page_allocator);
     }
+
+    for (experiments) |hyperparams| {
+        const result = try run_experiment(train_dataset, test_dataset, hyperparams);
+        experiment_results.appendAssumeCapacity(result);
+    }
+
+    // Launch GUI with training histories
+    gui.run_gui_with_histories(experiment_results.items);
 }
 
 fn parse_csv_data(content: []u8) !types.DataSet {
