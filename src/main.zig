@@ -3,6 +3,7 @@ const csv = @import("csv.zig");
 const types = @import("types.zig");
 const model = @import("model.zig");
 const gui = @import("gui.zig");
+const threading = @import("threading_test.zig");
 
 // ExperimentResult is now defined in types.zig
 
@@ -72,7 +73,7 @@ pub fn main() !void {
 
     const train_dataset = types.DataSet{ .x = dataset.x[0..500], .y = dataset.y[0..500] };
     const test_dataset = types.DataSet{ .x = dataset.x[500..], .y = dataset.y[500..] };
-    const epochs: i32 = 10000;
+    const epochs: i32 = 100000;
 
     // Define different hyperparameter configurations
     const experiments = [_]types.HyperParameters{
@@ -88,23 +89,24 @@ pub fn main() !void {
         },
     };
 
-    // Run each experiment and collect results
-    var experiment_results = try std.ArrayList(types.ExperimentResult).initCapacity(std.heap.page_allocator, experiments.len);
+    // Run experiments in parallel
+    std.debug.print("Running {d} experiments in parallel...\n", .{experiments.len});
+    const experiment_results = try threading.runExperimentsParallel(
+        std.heap.page_allocator,
+        train_dataset,
+        test_dataset,
+        &experiments,
+    );
     defer {
-        for (experiment_results.items) |*result| {
+        for (experiment_results) |*result| {
             result.history.losses.deinit(std.heap.page_allocator);
             result.history.epochs.deinit(std.heap.page_allocator);
         }
-        experiment_results.deinit(std.heap.page_allocator);
-    }
-
-    for (experiments) |hyperparams| {
-        const result = try run_experiment(train_dataset, test_dataset, hyperparams);
-        experiment_results.appendAssumeCapacity(result);
+        std.heap.page_allocator.free(experiment_results);
     }
 
     // Launch GUI with training histories
-    gui.run_gui_with_histories(experiment_results.items);
+    gui.run_gui_with_histories(experiment_results);
 }
 
 fn parse_csv_data(content: []u8) !types.DataSet {
