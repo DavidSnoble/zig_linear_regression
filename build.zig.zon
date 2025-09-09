@@ -1,0 +1,12 @@
+.{
+    .name = .zig_linear_regression,
+    .version = "0.15.1",
+    .dependencies = .{
+        .raylib_zig = .{
+            .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#c84506a92d58745611dc565590a33a701f59d9d7",
+            .hash = "raylib_zig-5.6.0-dev-KE8RELMzBQBrG2nDjgoLezzb3sG35oOTW21fOUe9oBRb",
+        },
+    },
+    .paths = .{""},
+    .fingerprint = 0xbc3b3fbf4f00dd68,
+}
