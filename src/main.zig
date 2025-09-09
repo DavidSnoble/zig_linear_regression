@@ -72,7 +72,7 @@ pub fn main() !void {
 
     const train_dataset = types.DataSet{ .x = dataset.x[0..500], .y = dataset.y[0..500] };
     const test_dataset = types.DataSet{ .x = dataset.x[500..], .y = dataset.y[500..] };
-    const epochs: i32 = 100000;
+    const epochs: i32 = 10000;
 
     // Define different hyperparameter configurations
     const experiments = [_]types.HyperParameters{

@@ -21,6 +21,7 @@ fn getColor(hex: i32) rl.Color {
 
 pub fn run_gui() void {
     // Initialize raylib for rendering
+    rl.setConfigFlags(rl.ConfigFlags{ .window_highdpi = true });
     rl.initWindow(400, 200, "Linear Regression Training Complete");
     defer rl.closeWindow();
 
@@ -77,6 +78,7 @@ pub fn run_gui_with_histories(histories: []const types.ExperimentResult) void {
     }
 
     // Initialize raylib for rendering with dynamic window size
+    rl.setConfigFlags(rl.ConfigFlags{ .window_highdpi = true });
     rl.initWindow(@intCast(window_width), @intCast(window_height), "Linear Regression Training Results");
     defer rl.closeWindow();
 
@@ -84,6 +86,7 @@ pub fn run_gui_with_histories(histories: []const types.ExperimentResult) void {
 
     var should_exit = false;
     var show_individual = false;
+    var selected_experiment: usize = 0;
 
     const color_int = rg.getStyle(.default, .{ .default = .background_color });
 
@@ -106,7 +109,6 @@ pub fn run_gui_with_histories(histories: []const types.ExperimentResult) void {
         if (histories.len > 0) {
             if (show_individual) {
                 // Individual experiment view (original functionality)
-                var selected_experiment: usize = 0;
                 for (histories, 0..) |_, i| {
                     const btn_x = @as(f32, @floatFromInt(50 + @as(i32, @intCast(i)) * 120));
                     const exp_name = histories[i].history.experiment_name;
@@ -129,10 +131,10 @@ pub fn run_gui_with_histories(histories: []const types.ExperimentResult) void {
                 const metrics = histories[selected_experiment].metrics;
                 const mse_text = std.fmt.allocPrint(std.heap.page_allocator, "Final MSE: {d:.6}", .{metrics.mse}) catch "Error";
                 defer std.heap.page_allocator.free(mse_text);
-                rl.drawText(@as([:0]const u8, @ptrCast(mse_text)), 50, @as(i32, @intFromFloat(graph_rect.y + graph_rect.height + 25)), 16, rl.Color.black);
+                rl.drawText(@as([:0]const u8, @ptrCast(mse_text)), @as(i32, @intFromFloat(graph_rect.x + graph_rect.width - 200)), @as(i32, @intFromFloat(graph_rect.y + 10)), 16, rl.Color.black);
                 const rmse_text = std.fmt.allocPrint(std.heap.page_allocator, "Final RMSE: {d:.6}", .{metrics.rmse}) catch "Error";
                 defer std.heap.page_allocator.free(rmse_text);
-                rl.drawText(@as([:0]const u8, @ptrCast(rmse_text)), 50, @as(i32, @intFromFloat(graph_rect.y + graph_rect.height + 45)), 16, rl.Color.black);
+                rl.drawText(@as([:0]const u8, @ptrCast(rmse_text)), @as(i32, @intFromFloat(graph_rect.x + graph_rect.width - 200)), @as(i32, @intFromFloat(graph_rect.y + 30)), 16, rl.Color.black);
             } else {
                 // Comparison view - all experiments overlaid
                 draw_comparison_graph(histories, graph_rect);
@@ -151,11 +153,6 @@ pub fn run_gui_with_histories(histories: []const types.ExperimentResult) void {
                 for (histories) |exp| {
                     const rate = get_sampling_rate(exp.history.losses.items.len);
                     if (rate > max_sampling_rate) max_sampling_rate = rate;
-                }
-                if (max_sampling_rate > 1) {
-                    const indicator_text = std.fmt.allocPrint(std.heap.page_allocator, "Data sampled at 1/{d} rate for performance", .{max_sampling_rate}) catch "Sampling active";
-                    defer std.heap.page_allocator.free(indicator_text);
-                    rl.drawText(@as([:0]const u8, @ptrCast(indicator_text)), 50, @as(i32, @intFromFloat(graph_rect.y + graph_rect.height + 85)), 12, rl.Color.gray);
                 }
             }
         }
@@ -397,12 +394,5 @@ fn draw_loss_graph(history: types.TrainingHistory, graph_rect: rl.Rectangle) voi
         const first_x = graph_rect.x + (graph_rect.width * @as(f32, @floatFromInt(first_epoch))) / @as(f32, @floatFromInt(max_epoch));
         const first_y = graph_rect.y + graph_rect.height - (graph_rect.height * (first_loss - min_loss)) / (max_loss - min_loss);
         rl.drawCircle(@intFromFloat(first_x), @intFromFloat(first_y), 2, color);
-    }
-
-    // Add sampling indicator if data is downsampled
-    if (sampling_rate > 1) {
-        const indicator_text = std.fmt.allocPrint(std.heap.page_allocator, "Sampling: 1/{d} points ({d} total)", .{ sampling_rate, history.losses.items.len }) catch "Sampling active";
-        defer std.heap.page_allocator.free(indicator_text);
-        rl.drawText(@as([:0]const u8, @ptrCast(indicator_text)), @intFromFloat(graph_rect.x), @intFromFloat(graph_rect.y + graph_rect.height + 25), 12, rl.Color.gray);
     }
 }
