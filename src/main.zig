@@ -72,13 +72,14 @@ pub fn main() !void {
 
     const train_dataset = types.DataSet{ .x = dataset.x[0..500], .y = dataset.y[0..500] };
     const test_dataset = types.DataSet{ .x = dataset.x[500..], .y = dataset.y[500..] };
+    const epochs: i32 = 10000;
 
     // Define different hyperparameter configurations
     const experiments = [_]types.HyperParameters{
-        .{ .epochs = 100000, .learning_rate = 0.00001, .name = "Fast Learning (Fixed LR)" },
-        .{ .epochs = 100000, .learning_rate = 0.000005, .name = "Medium Learning (Fixed LR)" },
+        .{ .epochs = epochs, .learning_rate = 0.00001, .name = "Fast Learning (Fixed LR)" },
+        .{ .epochs = epochs, .learning_rate = 0.000005, .name = "Medium Learning (Fixed LR)" },
         .{
-            .epochs = 100000,
+            .epochs = epochs,
             .learning_rate = 0.0001,
             .name = "Adaptive Learning Rate",
             .use_adaptive_lr = true,
